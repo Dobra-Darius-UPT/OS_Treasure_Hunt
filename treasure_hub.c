@@ -137,7 +137,7 @@ void view_treasure() {
 // Send command to monitor via file and signal
 void send_command_to_monitor(const char *cmd, const char *arg) {
     // Write command to file
-    FILE *cmd_file = fopen(COMMAND_FILE, "w");
+    FILE* cmd_file = fopen(COMMAND_FILE, "w");
     if (!cmd_file) {
         perror("fopen command file");
         return;
@@ -202,7 +202,7 @@ int main() {
     setup_signal_handlers();
     
     printf("=== Treasure Hunt Hub ===\n");
-    printf("Commands: start_monitor, list_hunts, list_treasures, view_treasure, stop_monitor, exit\n");
+    printf("Commands(in a possible usage order):\n 1.start_monitor\n 2.list_hunts\n 3.list_treasures\n 4.view_treasure\n 5.stop_monitor\n 6.exit\n");
     
     while (1) {
         printf("\nhub> ");

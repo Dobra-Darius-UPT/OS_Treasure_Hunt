@@ -27,4 +27,8 @@ Build a C program in the UNIX environment simulating a treasure hunt game system
       - created the treasure_hub with dependence need of the treasure_monitor in order to communicate via signals in order to complete the task.
       - for the treasure_hub i managed to display all the functions needed in terminal in order to be available for a user and also the signals checkup
       for all the cases(via process ID "pid")
-      TREASURE_MANAGER 
+      - treasure_hub will send the proposed comands to the monitor and execute the command, then the info wanted will be displayed on the hub
+      TREASURE_MONITOR
+      -  the monitor basicly looks on the current directory, finding and proccessing only the hunt directories and write the informations on a response file in order to pass them to the hub.
+      - handle the command proccessing in order to execute the wanted command and retrive all the needed parameters from the command
+      - implementation of the commands given by the hub
