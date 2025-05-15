@@ -9,21 +9,10 @@
 #include <errno.h>
 #include <limits.h>//for PATH_MAX
 #include <stddef.h>
+#include "treasure.h" //for the treasure structure(header file to have where i need)
 
-#define ID_SIZE 32
-#define NAME_SIZE 64
-#define CLUE_SIZE 512
 #define LOG_FILE "logged_hunt"
 #define TREASURE_FILE "treasures.dat"
-
-typedef struct {
-    char id[ID_SIZE];
-    char user_name[NAME_SIZE];
-    float latitude;
-    float longitude;
-    char clue[CLUE_SIZE];
-    int value;
-} Treasure;
 
 // Function prototypes
 void print_usage();//in case someone dose not know the functions
@@ -44,11 +33,11 @@ void get_treasure_input(Treasure *t);
 void print_usage() {
     printf("Usage: treasure_manager <operation> <hunt_id> [treasure_id]\n");
     printf("Operations:\n");
-    printf("  --add               Add a new treasure to the hunt\n");
-    printf("  --list              List all treasures in the hunt\n");
+    printf("  --add                Add a new treasure to the hunt\n");
+    printf("  --list               List all treasures in the hunt\n");
     printf("  --view <treasure_id> View details of a specific treasure\n");
     printf("  --remove_treasure <treasure_id> Remove a specific treasure\n");
-    printf("  --remove_hunt       Remove an entire hunt\n");
+    printf("  --remove_hunt        Remove an entire hunt\n");
     //for visibility i added a function to print the content of the log in terminal, so i don't have to open the file
     printf("  --view_log          View the operation log for a hunt\n");
 }

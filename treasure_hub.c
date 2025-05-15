@@ -7,8 +7,9 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <dirent.h>
 
-#define MAX_INPUT 256
+#define HUB_INPUT_SIZE 256
 #define COMMAND_FILE ".monitor_command"
 #define RESPONSE_FILE ".monitor_response"
 
@@ -23,6 +24,7 @@ void stop_monitor();
 void list_hunts();
 void list_treasures();
 void view_treasure();
+void calculate_score();
 void send_command_to_monitor(const char *cmd, const char *arg);
 void read_monitor_response();
 void setup_signal_handlers();
@@ -47,28 +49,42 @@ void handle_sigchld(int sig) {
 }
 
 // Start the monitor process
+int pipefd[2];
+
 void start_monitor() {
     if (monitor_running) {
         printf("Monitor is already running\n");
         return;
     }
-    
+
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
         return;
     }
-    
-    if (pid == 0) { // Child process (monitor)
+
+    if (pid == 0) {
+        // Child: monitor
+        close(pipefd[0]); // close read end
+        //dup2(pipefd[1], STDOUT_FILENO); // send stdout to pipe
+        close(pipefd[1]);
         execl("./treasure_monitor", "treasure_monitor", NULL);
         perror("execl");
         exit(EXIT_FAILURE);
-    } else { // Parent process
+    } else {
+        // Parent: hub
+        close(pipefd[1]); // we only read from the pipe
         monitor_pid = pid;
         monitor_running = true;
         printf("Monitor started with PID %d\n", pid);
     }
 }
+
 
 // Stop the monitor process
 void stop_monitor() {
@@ -104,8 +120,8 @@ void list_treasures() {
     }
     
     printf("Enter hunt ID: ");
-    char hunt_id[MAX_INPUT];
-    fgets(hunt_id, MAX_INPUT, stdin);
+    char hunt_id[HUB_INPUT_SIZE];
+    fgets(hunt_id, HUB_INPUT_SIZE, stdin);
     hunt_id[strcspn(hunt_id, "\n")] = '\0'; // Remove newline
     
     send_command_to_monitor("list_treasures", hunt_id);
@@ -119,61 +135,63 @@ void view_treasure() {
     }
     
     printf("Enter hunt ID: ");
-    char hunt_id[MAX_INPUT];
-    fgets(hunt_id, MAX_INPUT, stdin);
+    char hunt_id[HUB_INPUT_SIZE];
+    fgets(hunt_id, HUB_INPUT_SIZE, stdin);
     hunt_id[strcspn(hunt_id, "\n")] = '\0'; // Remove newline
     
     printf("Enter treasure ID: ");
-    char treasure_id[MAX_INPUT];
-    fgets(treasure_id, MAX_INPUT, stdin);
+    char treasure_id[HUB_INPUT_SIZE];
+    fgets(treasure_id, HUB_INPUT_SIZE, stdin);
     treasure_id[strcspn(treasure_id, "\n")] = '\0'; // Remove newline
     
-    char arg[MAX_INPUT * 2];
+    char arg[HUB_INPUT_SIZE * 2];
     snprintf(arg, sizeof(arg), "%s %s", hunt_id, treasure_id);
     
     send_command_to_monitor("view_treasure", arg);
 }
 
+
+void calculate_score() {
+    send_command_to_monitor("calculate_score", NULL);
+}
+
+
 // Send command to monitor via file and signal
 void send_command_to_monitor(const char *cmd, const char *arg) {
-    // Write command to file
     FILE* cmd_file = fopen(COMMAND_FILE, "w");
     if (!cmd_file) {
         perror("fopen command file");
         return;
     }
-    
+
     if (arg) {
         fprintf(cmd_file, "%s %s", cmd, arg);
     } else {
         fprintf(cmd_file, "%s", cmd);
     }
+
+    fflush(cmd_file);                   // flush buffer
     fclose(cmd_file);
-    
-    // Send signal to monitor
-    kill(monitor_pid, SIGUSR2);
-    
-    // Wait for response
-    read_monitor_response();
+
+    usleep(100000);
+
+    kill(monitor_pid, SIGUSR2);        // signal after write
+
+    read_monitor_response();           // read fresh response
 }
 
 // Read and display monitor response
 void read_monitor_response() {
-    usleep(100000); // Small delay to allow monitor to write response
-    
-    FILE *response = fopen(RESPONSE_FILE, "r");
-    if (!response) {
-        perror("fopen response file");
-        return;
-    }
-    
     printf("\n=== Monitor Response ===\n");
-    char line[MAX_INPUT];
-    while (fgets(line, MAX_INPUT, response)) {
-        printf("%s", line);
+
+    char buffer[512];
+    ssize_t n;
+    while ((n = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[n] = '\0';
+        printf("%s", buffer);
     }
-    fclose(response);
-    printf("=======================\n");
+    usleep(50000); //sync with the monitor
+    printf("=========================\n");
 }
 
 // Setup signal handlers
@@ -202,14 +220,14 @@ int main() {
     setup_signal_handlers();
     
     printf("=== Treasure Hunt Hub ===\n");
-    printf("Commands(in a possible usage order):\n 1.start_monitor\n 2.list_hunts\n 3.list_treasures\n 4.view_treasure\n 5.stop_monitor\n 6.exit\n");
+    printf("Commands(in a possible usage order):\n 1.start_monitor\n 2.list_hunts\n 3.list_treasures\n 4.calculate_score\n 5.view_treasure\n 6.stop_monitor\n 7.exit\n");
     
     while (1) {
         printf("\nhub> ");
         fflush(stdout);
         
-        char input[MAX_INPUT];
-        if (!fgets(input, MAX_INPUT, stdin)) {
+        char input[HUB_INPUT_SIZE];
+        if (!fgets(input, HUB_INPUT_SIZE, stdin)) {
             break; // EOF or error
         }
         
@@ -218,12 +236,35 @@ int main() {
         if (strcmp(input, "start_monitor") == 0) {
             start_monitor();
         } else if (strcmp(input, "list_hunts") == 0) {
+            if(!monitor_running){
+                printf("No monitor running!!\n\n");
+                continue;
+            }
             list_hunts();
         } else if (strcmp(input, "list_treasures") == 0) {
+            if(!monitor_running){
+                printf("No monitor running!!\n\n");
+                continue;
+            }
             list_treasures();
-        } else if (strcmp(input, "view_treasure") == 0) {
+        }else if (strcmp(input, "calculate_score") == 0) {
+            if(!monitor_running){
+                printf("No monitor running!!\n\n");
+                continue;
+            }
+            calculate_score();
+            clearerr(stdin); // ✅ restores input stream if it was set to EOF
+        }else if (strcmp(input, "view_treasure") == 0) {
+            if(!monitor_running){
+                printf("No monitor running!!\n\n");
+                continue;
+            }
             view_treasure();
         } else if (strcmp(input, "stop_monitor") == 0) {
+            if(!monitor_running){
+                printf("No monitor running, so you can't stop it!!\n\n");
+                continue;
+            }
             stop_monitor();
         } else if (strcmp(input, "exit") == 0) {
             if (monitor_running) {
